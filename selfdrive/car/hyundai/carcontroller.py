@@ -3,7 +3,7 @@ from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import clip, interp
 from openpilot.common.realtime import DT_CTRL
 from opendbc.can.packer import CANPacker
-from openpilot.selfdrive.car import apply_driver_steer_torque_limits, common_fault_avoidance
+from openpilot.selfdrive.car import apply_driver_steer_torque_limits, common_fault_avoidance, apply_std_steer_angle_limits
 from openpilot.selfdrive.car.hyundai import hyundaicanfd, hyundaican
 from openpilot.selfdrive.car.hyundai.hyundaicanfd import CanBus
 from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CANFD_CAR, CAR, LEGACY_SAFETY_MODE_CAR, CAN_GEARS, HyundaiExtFlags
@@ -59,6 +59,8 @@ class CarController(CarControllerBase):
     self.apply_steer_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
+    self.apply_angle_last = 0
+    self.lkas_max_torque = 0
     
     self.jerkStartLimit = 2.0
     self.speedCameraHapticEndFrame = 0
@@ -138,7 +140,7 @@ class CarController(CarControllerBase):
     # CS.out.steeringPressed and steeringTorque are based on the
     # STEERING_COL_TORQUE value
 
-    MAX_TORQUE = 200
+    MAX_TORQUE = 130
     if not bool(CS.out.steeringPressed):
 
       # If steering is not pressed, use max torque (TODO: need to find this value)
@@ -236,8 +238,9 @@ class CarController(CarControllerBase):
       hda2_long = hda2 and self.CP.openpilotLongitudinalControl
 
       # steering control
-      can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer))
-
+      can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled,
+                                                             apply_steer_req, CS.out.steeringPressed,
+                                                             apply_steer, apply_angle, self.lkas_max_torque))
       ## carrot 기존데이터를 복사하니.. mdps에러가 뜨는것 같음...
       #if self.CP.extFlags & HyundaiExtFlags.SCC_BUS2.value:  
       #  can_sends.append(hyundaicanfd.create_steering_messages_scc2(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_steer, CS.lfa_info))
