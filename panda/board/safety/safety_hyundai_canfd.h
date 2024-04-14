@@ -292,17 +292,24 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
 
   if (hyundai_acan_panda) return tx;
 
-  // steering
-  const int steer_addr = (hyundai_canfd_hda2 && !hyundai_longitudinal) ? hyundai_canfd_hda2_get_lkas_addr() : 0x12a;
-  if (addr == steer_addr) {
-    int desired_torque = (((GET_BYTE(to_send, 6) & 0xFU) << 7U) | (GET_BYTE(to_send, 5) >> 1U)) - 1024U;
-    bool steer_req = GET_BIT(to_send, 52U);
+// steering
+const int steer_addr = (hyundai_canfd_hda2 && !hyundai_longitudinal) ? hyundai_canfd_hda2_get_lkas_addr() : 0x12a;
+if (addr == steer_addr) {
+  int desired_torque = (((GET_BYTE(to_send, 6) & 0xFU) << 7U) | (GET_BYTE(to_send, 5) >> 1U)) - 1024U;
+  bool steer_req = GET_BIT(to_send, 52U);
+  int max_torque = GET_BYTE(to_send, 12U);
 
-    if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
-    if (steer_torque_cmd_checks(desired_torque, steer_req, HYUNDAI_CANFD_STEERING_LIMITS)) {
-      //tx = false;
-    }
+  if (steer_req) lat_active_count = 100; // carrot, latActive message from OP
+
+  if (!controls_allowed && (max_torque != 0)) {
+    tx = false;
   }
+
+  if (steer_torque_cmd_checks(desired_torque, steer_req, HYUNDAI_CANFD_STEERING_LIMITS)) {
+    tx = false;
+  }
+}
+  
   // carrot automatic detect main enabled..
   if (lat_active_count > 0) lat_active_count--;
   acc_main_on = (lat_active_count > 0) || controls_allowed;
