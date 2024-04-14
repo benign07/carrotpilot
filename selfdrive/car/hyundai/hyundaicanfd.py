@@ -59,14 +59,14 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, steering_pres
   ret = []
 
   values = {
-    "LKA_MODE": 2,
+    "LKA_MODE": 0,
     "LKA_ICON": 2 if enabled else 1,
-    "TORQUE_REQUEST": apply_steer,
+    "TORQUE_REQUEST": 0, # apply_steer,
     "LKA_ASSIST": 0,
-    "STEER_REQ": 1 if lat_active else 0,
+    "STEER_REQ": 0, # 1 if lat_active else 0,
     "STEER_MODE": 0,
     "HAS_LANE_SAFETY": 0,  # hide LKAS settings
-    "NEW_SIGNAL_1": 0,
+    "NEW_SIGNAL_1": 3 if lat_active else 0, # this changes sometimes, 3 seems to indicate engaged
     "NEW_SIGNAL_2": 0,      
     "LKAS_ANGLE_CMD": -apply_angle,
     "LKAS_ANGLE_ACTIVE": 2 if lat_active else 1,
