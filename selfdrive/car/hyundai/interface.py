@@ -1,5 +1,6 @@
 from cereal import car
 from panda import Panda
+from openpilot.common.swaglog import cloudlog
 from openpilot.common.conversions import Conversions as CV
 from openpilot.selfdrive.car.hyundai.hyundaicanfd import CanBus
 from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_CAR, CAMERA_SCC_CAR, CANFD_RADAR_SCC_CAR, \
@@ -15,6 +16,9 @@ from selfdrive.car.isotp_parallel_query import IsoTpParallelQuery #ajouatom
 Ecu = car.CarParams.Ecu
 ButtonType = car.CarState.ButtonEvent.Type
 EventName = car.CarEvent.EventName
+
+SteerControlType = car.CarParams.SteerControlType
+
 ENABLE_BUTTONS = (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.CANCEL)
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
@@ -25,6 +29,9 @@ class CarInterface(CarInterfaceBase):
   def _get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs):
     ret.carName = "hyundai"
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or DBC[ret.carFingerprint]["radar"] is None
+ 
+    if candidate == CAR.KIA_EV9:
+      ret.steerControlType = SteerControlType.angle
 
     # These cars have been put into dashcam only due to both a lack of users and test coverage.
     # These cars likely still work fine. Once a user confirms each car works and a test route is
@@ -41,49 +48,66 @@ class CarInterface(CarInterfaceBase):
     CAN = CanBus(None, hda2, fingerprint)
 
     if candidate in CANFD_CAR:
+      cloudlog.warning("HYK_DEBUG: Is CANFD Car")
       print("$$$$CANFD_CAR")
       # detect if car is hybrid
       if 0x105 in fingerprint[CAN.ECAN]: # 0x105(261): ACCELERATOR_ALT
         ret.flags |= HyundaiFlags.HYBRID.value
+        cloudlog.warning("HYK_DEBUG: Hybrid")
         print("$$$CANFD Hybrid")
       elif candidate in EV_CAR:
         print("$$$CANFD EV")
         ret.flags |= HyundaiFlags.EV.value
+        cloudlog.warning("HYK_DEBUG: EV")
+
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
-        print("$$$CANFD HDA2")
+        cloudlog.warning("HYK_DEBUG: Is HDA2")
         ret.flags |= HyundaiFlags.CANFD_HDA2.value
-        if scc2 > 0:
-          if 0x110 in fingerprint[CAN.ACAN]:
-            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-            print("$$$CANFD ALT_STEERING1")
-        else:
-          if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
-            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-            print("$$$CANFD ALT_STEERING1")
-          ## carrot_todo: sorento: 뭐 이런코드가... ㅠㅠ
-          if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
-            ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
-            print("$$$CANFD ALT_STEERING2")
+        if 0x110 in fingerprint[CAN.CAM]:
+          ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+          cloudlog.warning("HYK_DEBUG: Is HDA2 Alt Steering")
+      else:
+        cloudlog.warning("HYK_DEBUG: Not HDA2")
+
+
+      
+   #   if hda2:
+   #     print("$$$CANFD HDA2")
+   #     cloudlog.warning("HYK_DEBUG: Is HDA2")
+   #     ret.flags |= HyundaiFlags.CANFD_HDA2.value
+   #     if scc2 > 0:
+   #       if 0x110 in fingerprint[CAN.ACAN]:
+   #         ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+   #         print("$$$CANFD ALT_STEERING1")
+   #     else:
+   #       if 0x110 in fingerprint[CAN.CAM]: # 0x110(272): LKAS_ALT
+   #         ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+   #         print("$$$CANFD ALT_STEERING1")
+   #       ## carrot_todo: sorento: 뭐 이런코드가... ㅠㅠ
+   #       if 0x2a4 not in fingerprint[CAN.CAM]: # 0x2a4(676): CAM_0x2a4
+   #         ret.flags |= HyundaiFlags.CANFD_HDA2_ALT_STEERING.value
+   #         print("$$$CANFD ALT_STEERING2")
 
         ## carrot: canival 4th, no 0x1cf
-        if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
-          ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
-          print("$$$CANFD ALT_BUTTONS")
-        ## carrot
-        if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
-          if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
-            if 112 not in fingerprint[CAN.ECAN]:  # carrot: eGV70
-              ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
-              print("$$$CANFD GEARS_NONE")
-            else:
-              ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
-              print("$$$CANFD ALT_GEARS_2")
-          else:
-            ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
-            print("$$$CANFD ALT_GEARS")
-      else:
+   #     if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
+   #       ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
+   #       print("$$$CANFD ALT_BUTTONS")
+   #     ## carrot
+   #     if 0x130 not in fingerprint[CAN.ECAN]: # 0x130(304): GEAR_SHIFTER
+   #       if 0x40 not in fingerprint[CAN.ECAN]: # 0x40(64): GEAR_ALT
+   #         if 112 not in fingerprint[CAN.ECAN]:  # carrot: eGV70
+   #           ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value
+   #           print("$$$CANFD GEARS_NONE")
+   #         else:
+   #           ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
+   #           print("$$$CANFD ALT_GEARS_2")
+   #       else:
+   #         ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
+   #         print("$$$CANFD ALT_GEARS")
+   #   else:
+      
         # non-HDA2
         print("$$$CANFD non HDA2")
         if 0x1cf not in fingerprint[CAN.ECAN]:  # 0x1cf(463): CRUISE_BUTTONS
